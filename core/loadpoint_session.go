@@ -82,6 +82,7 @@ type sessionOption func(*session.Session)
 
 // updateSession updates any parameter of a charging session and persists the session.
 func (lp *Loadpoint) updateSession(opts ...sessionOption) {
+	time.Sleep(60 * time.Second)
 	// test guard
 	if lp.db == nil || lp.session == nil {
 		return
