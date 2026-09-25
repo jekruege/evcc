@@ -213,14 +213,14 @@ render: |
         uri: {{ .apiurl }}/api/state
         jq: '[.loadpoints[] | select(.title == "{{ .loadpoint }}") | .effectiveMinSoc][0] // 0 | floor'
     script: |
-      t := int64({{ .normaltemp }})
-      if mode == 3 {
+      t := {{ .normaltemp }}
+      if int(mode) == 3 {
         t = {{ .boosttemp }}
-        if limit > 0 && limit < t {
-          t = limit
+        if l := int(limit); l > 0 && l < t {
+          t = l
         }
-      } else if minimum > 0 {
-        t = minimum
+      } else if m := int(minimum); m > 0 {
+        t = m
       }
       t
     out:
