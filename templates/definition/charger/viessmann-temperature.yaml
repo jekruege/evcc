@@ -183,6 +183,39 @@ params:
     help:
       de: Abfrageintervall für Leistung und Temperatur. Die Viessmann API hat ein knappes Tageslimit, das mit der ViCare App geteilt wird. Bei Fehler 429 erhöhen.
       en: Polling interval for power and temperature. The Viessmann API has a tight daily quota shared with the ViCare app. Increase on HTTP 429.
+  - name: heating_circuit
+    advanced: true
+    description:
+      de: Heizkreis für Raumtemperatur-Boost
+      en: Heating circuit for room temperature boost
+    help:
+      de: Nummer des Heizkreises, z. B. `1` für `heating.circuits.1`. Ist er gesetzt, wird bei Boost zusätzlich die Raum-Solltemperatur angehoben. Leer lassen, um nur Warmwasser zu steuern.
+      en: Number of the heating circuit, e.g. `1` for `heating.circuits.1`. If set, the room target temperature is raised on boost as well. Leave empty to control hot water only.
+  - name: heating_program
+    advanced: true
+    default: normalHeating
+    description:
+      de: Heizprogramm
+      en: Heating program
+    help:
+      de: Programm, dessen Solltemperatur umgeschaltet wird, z. B. `normalHeating` (Wärmepumpen) oder `normal`
+      en: Program whose target temperature is switched, e.g. `normalHeating` (heat pumps) or `normal`
+  - name: roomnormal
+    advanced: true
+    type: int
+    unit: °C
+    default: 20
+    description:
+      de: Raum-Solltemperatur normal
+      en: Normal room target temperature
+  - name: roomboost
+    advanced: true
+    type: int
+    unit: °C
+    default: 22
+    description:
+      de: Raum-Solltemperatur bei Boost
+      en: Boost room target temperature
   - name: apiurl
     default: http://localhost:7070
     advanced: true
@@ -201,55 +234,69 @@ render: |
   # The free API plan rejects heating.dhw.oneTimeCharge (402), but allows changing the DHW target.
   # No getmode: the shared feature cache would report the previous target right after a switch.
   setmode:
-    {{- if .loadpoint }}
-    # Target follows the loadpoint: boost uses the temperature limit, normal the minimum temperature.
-    source: go
-    in:
-    - name: limit
-      type: int
-      config:
-        source: http
-        uri: {{ .apiurl }}/api/state
-        cache: 5s
-        jq: '[.loadpoints[] | select(.title == "{{ .loadpoint }}") | .effectiveLimitSoc][0] // 0 | floor'
-    - name: minimum
-      type: int
-      config:
-        source: http
-        uri: {{ .apiurl }}/api/state
-        cache: 5s
-        jq: '[.loadpoints[] | select(.title == "{{ .loadpoint }}") | .effectiveMinSoc][0] // 0 | floor'
-    script: |
-      t := {{ .normaltemp }}
-      if int(mode) == 3 {
-        t = {{ .boosttemp }}
-        if l := int(limit); l > 0 && l < t {
-          t = l
+    source: sequence
+    set:
+      {{- if .loadpoint }}
+      # Target follows the loadpoint: boost uses the temperature limit, normal the minimum temperature.
+    - source: go
+      in:
+      - name: limit
+        type: int
+        config:
+          source: http
+          uri: {{ .apiurl }}/api/state
+          cache: 5s
+          jq: '[.loadpoints[] | select(.title == "{{ .loadpoint }}") | .effectiveLimitSoc][0] // 0 | floor'
+      - name: minimum
+        type: int
+        config:
+          source: http
+          uri: {{ .apiurl }}/api/state
+          cache: 5s
+          jq: '[.loadpoints[] | select(.title == "{{ .loadpoint }}") | .effectiveMinSoc][0] // 0 | floor'
+      script: |
+        t := {{ .normaltemp }}
+        if int(mode) == 3 {
+          t = {{ .boosttemp }}
+          if l := int(limit); l > 0 && l < t {
+            t = l
+          }
+        } else if m := int(minimum); m > 0 {
+          t = m
         }
-      } else if m := int(minimum); m > 0 {
-        t = m
-      }
-      t
-    out:
-    - name: target
-      type: int
-      config:
-        source: http
-        uri: {{ $device }}/features/heating.dhw.temperature.main/commands/setTargetTemperature
-        method: POST
-        headers:
-          - content-type: application/json
-        auth:
-          source: viessmann
-          clientid: {{ .clientid }}
-          redirecturi: {{ .redirecturi }}
-          gateway_serial: {{ .gateway_serial }}
-        body: '{ "temperature": ${target} }'
-    {{- else }}
-    source: switch
-    switch:
-    - case: 2 # normal
-      set:
+        t
+      out:
+      - name: target
+        type: int
+        config:
+          source: http
+          uri: {{ $device }}/features/heating.dhw.temperature.main/commands/setTargetTemperature
+          method: POST
+          headers:
+            - content-type: application/json
+          auth:
+            source: viessmann
+            clientid: {{ .clientid }}
+            redirecturi: {{ .redirecturi }}
+            gateway_serial: {{ .gateway_serial }}
+          body: '{ "temperature": ${target} }'
+      {{- else }}
+    - source: switch
+      switch:
+      - case: 3 # boost
+        set:
+          source: http
+          uri: {{ $device }}/features/heating.dhw.temperature.main/commands/setTargetTemperature
+          method: POST
+          headers:
+            - content-type: application/json
+          auth:
+            source: viessmann
+            clientid: {{ .clientid }}
+            redirecturi: {{ .redirecturi }}
+            gateway_serial: {{ .gateway_serial }}
+          body: '{ "temperature": {{ .boosttemp }} }'
+      default: # normal and dim
         source: http
         uri: {{ $device }}/features/heating.dhw.temperature.main/commands/setTargetTemperature
         method: POST
@@ -261,10 +308,26 @@ render: |
           redirecturi: {{ .redirecturi }}
           gateway_serial: {{ .gateway_serial }}
         body: '{ "temperature": {{ .normaltemp }} }'
-    - case: 3 # boost
-      set:
+      {{- end }}
+    {{- if .heating_circuit }}
+    - source: switch
+      switch:
+      - case: 3 # boost
+        set:
+          source: http
+          uri: {{ $device }}/features/heating.circuits.{{ .heating_circuit }}.operating.programs.{{ .heating_program }}/commands/setTemperature
+          method: POST
+          headers:
+            - content-type: application/json
+          auth:
+            source: viessmann
+            clientid: {{ .clientid }}
+            redirecturi: {{ .redirecturi }}
+            gateway_serial: {{ .gateway_serial }}
+          body: '{ "targetTemperature": {{ .roomboost }} }'
+      default:
         source: http
-        uri: {{ $device }}/features/heating.dhw.temperature.main/commands/setTargetTemperature
+        uri: {{ $device }}/features/heating.circuits.{{ .heating_circuit }}.operating.programs.{{ .heating_program }}/commands/setTemperature
         method: POST
         headers:
           - content-type: application/json
@@ -273,11 +336,7 @@ render: |
           clientid: {{ .clientid }}
           redirecturi: {{ .redirecturi }}
           gateway_serial: {{ .gateway_serial }}
-        body: '{ "temperature": {{ .boosttemp }} }'
-    - case: 1 # dimm
-      set:
-        source: error
-        error: ErrNotAvailable
+        body: '{ "targetTemperature": {{ .roomnormal }} }'
     {{- end }}
   {{- if .measurements }}
   power:
