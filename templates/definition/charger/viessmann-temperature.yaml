@@ -178,6 +178,11 @@ params:
     help:
       de: Titel des Ladepunkts, dem diese Wärmepumpe zugeordnet ist. Dessen Temperatur-Limit und Mindesttemperatur werden als Soll-Temperaturen übernommen. Leer lassen, um nur die festen Werte zu verwenden.
       en: Title of the loadpoint this heat pump is assigned to. Its temperature limit and minimum temperature are used as target temperatures. Leave empty to use the fixed values only.
+  - name: cache
+    default: 5m
+    help:
+      de: Abfrageintervall für Leistung und Temperatur. Die Viessmann API hat ein knappes Tageslimit, das mit der ViCare App geteilt wird. Bei Fehler 429 erhöhen.
+      en: Polling interval for power and temperature. The Viessmann API has a tight daily quota shared with the ViCare app. Increase on HTTP 429.
   - name: apiurl
     default: http://localhost:7070
     advanced: true
@@ -194,7 +199,7 @@ render: |
   {{- $device := printf "https://api.viessmann-climatesolutions.com/iot/v2/features/installations/%s/gateways/%s/devices/%s" .installation_id .gateway_serial .device_id }}
   type: sgready
   # The free API plan rejects heating.dhw.oneTimeCharge (402), but allows changing the DHW target.
-  # No getmode: the shared 60s feature cache would report the previous target right after a switch.
+  # No getmode: the shared feature cache would report the previous target right after a switch.
   setmode:
     {{- if .loadpoint }}
     # Target follows the loadpoint: boost uses the temperature limit, normal the minimum temperature.
@@ -205,12 +210,14 @@ render: |
       config:
         source: http
         uri: {{ .apiurl }}/api/state
+        cache: 5s
         jq: '[.loadpoints[] | select(.title == "{{ .loadpoint }}") | .effectiveLimitSoc][0] // 0 | floor'
     - name: minimum
       type: int
       config:
         source: http
         uri: {{ .apiurl }}/api/state
+        cache: 5s
         jq: '[.loadpoints[] | select(.title == "{{ .loadpoint }}") | .effectiveMinSoc][0] // 0 | floor'
     script: |
       t := {{ .normaltemp }}
@@ -277,10 +284,10 @@ render: |
     # heating.power.consumption.current reports the real electrical input power in kW.
     # Reading it replaces evcc's fallback estimate (current * phases * voltage), which
     # wrongly assumed a full electric-heater draw when no meter was configured.
-    # Same URL + cache as getmode -> served from the shared cached feature list.
+    # Same URL + cache as temp -> served from the shared cached feature list.
     source: http
     uri: {{ $device }}/features
-    cache: 60s
+    cache: {{ .cache }}
     auth:
       source: viessmann
       clientid: {{ .clientid }}
@@ -293,7 +300,7 @@ render: |
     # temperature to display on the loadpoint gauge.
     source: http
     uri: {{ $device }}/features
-    cache: 60s
+    cache: {{ .cache }}
     auth:
       source: viessmann
       clientid: {{ .clientid }}
