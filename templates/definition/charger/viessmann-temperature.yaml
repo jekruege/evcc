@@ -158,13 +158,35 @@ params:
     description:
       de: Warmwasser-Solltemperatur normal
       en: Normal hot water target temperature
+    help:
+      de: Wird verwendet, solange am Ladepunkt keine Mindesttemperatur eingestellt ist.
+      en: Used as long as no minimum temperature is set on the loadpoint.
   - name: boosttemp
     type: int
     unit: °C
     default: 55
     description:
-      de: Warmwasser-Solltemperatur bei Boost
-      en: Boost hot water target temperature
+      de: Maximale Warmwasser-Solltemperatur bei Boost
+      en: Maximum boost hot water target temperature
+    help:
+      de: Obergrenze, die das Gerät akzeptiert. Ein niedrigeres Temperatur-Limit am Ladepunkt hat Vorrang.
+      en: Upper bound accepted by the device. A lower loadpoint temperature limit takes precedence.
+  - name: loadpoint
+    description:
+      de: Titel des Ladepunkts
+      en: Loadpoint title
+    help:
+      de: Titel des Ladepunkts, dem diese Wärmepumpe zugeordnet ist. Dessen Temperatur-Limit und Mindesttemperatur werden als Soll-Temperaturen übernommen. Leer lassen, um nur die festen Werte zu verwenden.
+      en: Title of the loadpoint this heat pump is assigned to. Its temperature limit and minimum temperature are used as target temperatures. Leave empty to use the fixed values only.
+  - name: apiurl
+    default: http://localhost:7070
+    advanced: true
+    description:
+      de: Lokale Adresse der evcc-API
+      en: Local evcc API address
+    help:
+      de: Nur nötig, wenn ein Ladepunkt-Titel gesetzt ist. Port anpassen, falls evcc nicht auf 7070 läuft.
+      en: Only needed if a loadpoint title is set. Adjust the port if evcc does not run on 7070.
 auth:
   type: viessmann
   params: [clientid, redirecturi, gateway_serial]
@@ -174,6 +196,49 @@ render: |
   # The free API plan rejects heating.dhw.oneTimeCharge (402), but allows changing the DHW target.
   # No getmode: the shared 60s feature cache would report the previous target right after a switch.
   setmode:
+    {{- if .loadpoint }}
+    # Target follows the loadpoint: boost uses the temperature limit, normal the minimum temperature.
+    source: go
+    in:
+    - name: limit
+      type: int
+      config:
+        source: http
+        uri: {{ .apiurl }}/api/state
+        jq: '[.loadpoints[] | select(.title == "{{ .loadpoint }}") | .effectiveLimitSoc][0] // 0 | floor'
+    - name: minimum
+      type: int
+      config:
+        source: http
+        uri: {{ .apiurl }}/api/state
+        jq: '[.loadpoints[] | select(.title == "{{ .loadpoint }}") | .effectiveMinSoc][0] // 0 | floor'
+    script: |
+      t := int64({{ .normaltemp }})
+      if mode == 3 {
+        t = {{ .boosttemp }}
+        if limit > 0 && limit < t {
+          t = limit
+        }
+      } else if minimum > 0 {
+        t = minimum
+      }
+      t
+    out:
+    - name: target
+      type: int
+      config:
+        source: http
+        uri: {{ $device }}/features/heating.dhw.temperature.main/commands/setTargetTemperature
+        method: POST
+        headers:
+          - content-type: application/json
+        auth:
+          source: viessmann
+          clientid: {{ .clientid }}
+          redirecturi: {{ .redirecturi }}
+          gateway_serial: {{ .gateway_serial }}
+        body: '{ "temperature": ${target} }'
+    {{- else }}
     source: switch
     switch:
     - case: 2 # normal
@@ -206,6 +271,7 @@ render: |
       set:
         source: error
         error: ErrNotAvailable
+    {{- end }}
   {{- if .measurements }}
   power:
     # heating.power.consumption.current reports the real electrical input power in kW.
