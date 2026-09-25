@@ -195,8 +195,8 @@ params:
     advanced: true
     default: normalHeating
     description:
-      de: Heizprogramm
-      en: Heating program
+      de: Heizprogramm der Heizkurve
+      en: Heating curve heating program
     help:
       de: Programm, dessen Solltemperatur umgeschaltet wird, z. B. `normalHeating` (Wärmepumpen) oder `normal`
       en: Program whose target temperature is switched, e.g. `normalHeating` (heat pumps) or `normal`
