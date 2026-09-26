@@ -2,18 +2,18 @@ template: viessmann-temperature
 products:
   - brand: Viessmann
     description:
-      generic: Heatpump (API, hot water target temperature)
+      generic: Heatpump (API, without abo - hot water target temperature, heating curve increase)
 group: heating
 requirements:
   evcc: ["skiptest"]
   description:
     de: |
       Hebt bei Boost die Warmwasser-Solltemperatur an und setzt sie danach wieder zurück. Alternative zur Einmal-Warmwasserbereitung, die im kostenlosen Basic-Plan der Viessmann API mit „402 Payment Required“ abgelehnt wird.
-
+      Auch die Heiztemperaturkennlinie kann erhöht werden.
       Optional können Leistungs- und Temperaturwerte ausgelesen werden. Das setzt Datenpunkte der One-Base-/E3-Gerätegeneration voraus (z. B. Vitocal 25x, getestet mit Vitocal 250-A). Welche Datenpunkte ein Gerät liefert, ist geräteabhängig und lässt sich über die [Viessmann API](https://developer.viessmann-climatesolutions.com/) am Feature-Endpunkt der Anlage ablesen. Die Option „Leistungs- und Temperaturwerte auslesen" wird nach der Anmeldung automatisch vorbelegt, wenn das Gerät die Datenpunkte liefert.
     en: |
       Raises the hot water target temperature on boost and resets it afterwards. Alternative to the one-time hot water charge, which the free Viessmann API Basic plan rejects with "402 Payment Required".
-
+      Increase of the heating curve is posssible, too.
       Optionally, power and temperature readings can be enabled. This requires data points of the One Base/E3 device generation (e.g. Vitocal 25x, tested with a Vitocal 250-A). Which data points a device provides is device-specific and can be inspected via the [Viessmann API](https://developer.viessmann-climatesolutions.com/) feature endpoint of the installation. The "Read power and temperature values" option is pre-set automatically after login if the device provides the data points.
 params:
   - name: clientid
@@ -186,36 +186,46 @@ params:
   - name: heating_circuit
     advanced: true
     description:
-      de: Heizkreis für Raumtemperatur-Boost
-      en: Heating circuit for room temperature boost
+      de: Heizkreis für Heizkennlinien-Boost
+      en: Heating circuit for heating curve boost
     help:
-      de: Nummer des Heizkreises, z. B. `1` für `heating.circuits.1`. Ist er gesetzt, wird bei Boost zusätzlich die Raum-Solltemperatur angehoben. Leer lassen, um nur Warmwasser zu steuern.
-      en: Number of the heating circuit, e.g. `1` for `heating.circuits.1`. If set, the room target temperature is raised on boost as well. Leave empty to control hot water only.
+      de: Nummer des Heizkreises in der API, z. B. `1` für `heating.circuits.1` (in der ViCare App meist „Heizkreis 2“). Ist er zusammen mit der Neigung gesetzt, wird bei Boost das Niveau der Heizkennlinie angehoben. Leer lassen, um nur Warmwasser zu steuern.
+      en: Heating circuit number in the API, e.g. `1` for `heating.circuits.1` (usually "heating circuit 2" in the ViCare app). If set together with the slope, the heating curve shift is raised on boost. Leave empty to control hot water only.
+  - name: curve_slope
+    advanced: true
+    type: float
+    description:
+      de: Neigung der Heizkennlinie
+      en: Heating curve slope
+    help:
+      de: Aktuelle Neigung aus der ViCare App (Heizkennlinie). Wird unverändert mitgesendet, da die API Neigung und Niveau nur gemeinsam annimmt.
+      en: Current slope from the ViCare app (heating curve). Sent unchanged, since the API only accepts slope and shift together.
+  - name: curve_shift_normal
+    advanced: true
+    type: int
+    default: 0
+    description:
+      de: Niveau der Heizkennlinie normal
+      en: Normal heating curve shift
+    help:
+      de: Aktuelles Niveau aus der ViCare App. Wird nach dem Boost wiederhergestellt.
+      en: Current shift from the ViCare app. Restored after boost.
+  - name: curve_shift_boost
+    advanced: true
+    type: int
+    default: 3
+    description:
+      de: Niveau der Heizkennlinie bei Boost
+      en: Boost heating curve shift
+    help:
+      de: Niveau während Boost. Jede Stufe hebt die Vorlauftemperatur um etwa 1 K an.
+      en: Shift during boost. Each step raises the flow temperature by about 1 K.
   - name: heating_program
-    advanced: true
-    default: normalHeating
-    description:
-      de: Heizprogramm der Heizkurve
-      en: Heating curve heating program
-    help:
-      de: Programm, dessen Solltemperatur umgeschaltet wird, z. B. `normalHeating` (Wärmepumpen) oder `normal`
-      en: Program whose target temperature is switched, e.g. `normalHeating` (heat pumps) or `normal`
+    deprecated: true
   - name: roomnormal
-    advanced: true
-    type: int
-    unit: °C
-    default: 20
-    description:
-      de: Raum-Solltemperatur normal
-      en: Normal room target temperature
+    deprecated: true
   - name: roomboost
-    advanced: true
-    type: int
-    unit: °C
-    default: 22
-    description:
-      de: Raum-Solltemperatur bei Boost
-      en: Boost room target temperature
+    deprecated: true
   - name: apiurl
     default: http://localhost:7070
     advanced: true
@@ -309,13 +319,14 @@ render: |
           gateway_serial: {{ .gateway_serial }}
         body: '{ "temperature": {{ .normaltemp }} }'
       {{- end }}
-    {{- if .heating_circuit }}
+    {{- if and .heating_circuit .curve_slope }}
+    # Parallel shift of the heating curve raises the flow temperature (and buffer charging) during boost.
     - source: switch
       switch:
       - case: 3 # boost
         set:
           source: http
-          uri: {{ $device }}/features/heating.circuits.{{ .heating_circuit }}.operating.programs.{{ .heating_program }}/commands/setTemperature
+          uri: {{ $device }}/features/heating.circuits.{{ .heating_circuit }}.heating.curve/commands/setCurve
           method: POST
           headers:
             - content-type: application/json
@@ -324,10 +335,10 @@ render: |
             clientid: {{ .clientid }}
             redirecturi: {{ .redirecturi }}
             gateway_serial: {{ .gateway_serial }}
-          body: '{ "targetTemperature": {{ .roomboost }} }'
-      default:
+          body: '{ "slope": {{ .curve_slope }}, "shift": {{ .curve_shift_boost }} }'
+      default: # normal and dim
         source: http
-        uri: {{ $device }}/features/heating.circuits.{{ .heating_circuit }}.operating.programs.{{ .heating_program }}/commands/setTemperature
+        uri: {{ $device }}/features/heating.circuits.{{ .heating_circuit }}.heating.curve/commands/setCurve
         method: POST
         headers:
           - content-type: application/json
@@ -336,7 +347,7 @@ render: |
           clientid: {{ .clientid }}
           redirecturi: {{ .redirecturi }}
           gateway_serial: {{ .gateway_serial }}
-        body: '{ "targetTemperature": {{ .roomnormal }} }'
+        body: '{ "slope": {{ .curve_slope }}, "shift": {{ .curve_shift_normal }} }'
     {{- end }}
   {{- if .measurements }}
   power:
