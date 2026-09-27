@@ -2,19 +2,31 @@ template: viessmann-temperature
 products:
   - brand: Viessmann
     description:
-      generic: Heatpump (API, hot water target temperature)
+      generic: Heatpump (API, ohne Abo)
 group: heating
 requirements:
   evcc: ["skiptest"]
   description:
     de: |
-      Hebt bei Boost die Warmwasser-Solltemperatur an und setzt sie danach wieder zurück. Alternative zur Einmal-Warmwasserbereitung, die im kostenlosen Basic-Plan der Viessmann API mit „402 Payment Required“ abgelehnt wird.
+      Steuert die Wärmepumpe über die Viessmann API und funktioniert auch ohne Abo im kostenlosen Basic-Plan. Statt der Einmal-Warmwasserbereitung, die dort mit „402 Payment Required“ abgelehnt wird, wird zwischen Normal und Boost umgeschaltet:
 
-      Optional können Leistungs- und Temperaturwerte ausgelesen werden. Das setzt Datenpunkte der One-Base-/E3-Gerätegeneration voraus (z. B. Vitocal 25x, getestet mit Vitocal 250-A). Welche Datenpunkte ein Gerät liefert, ist geräteabhängig und lässt sich über die [Viessmann API](https://developer.viessmann-climatesolutions.com/) am Feature-Endpunkt der Anlage ablesen. Die Option „Leistungs- und Temperaturwerte auslesen" wird nach der Anmeldung automatisch vorbelegt, wenn das Gerät die Datenpunkte liefert.
+      - **Warmwasser:** Bei Boost wird die Warmwasser-Solltemperatur angehoben und danach wieder auf den Normalwert gesetzt.
+      - **Kopplung an den Ladepunkt (optional):** Mit dem Titel des Ladepunkts folgt die Boost-Temperatur dessen Temperatur-Limit (höchstens die maximale Boost-Temperatur) und die Normaltemperatur dessen Mindesttemperatur.
+      - **Heizkennlinie (optional):** Bei Boost wird zusätzlich das Niveau der Heizkennlinie eines Heizkreises angehoben. Das erhöht die Vorlauftemperatur und damit auch die Ladung des Pufferspeichers. Die Neigung wird unverändert mitgesendet.
+      - **Mindestlaufzeit (optional):** Ein Boost läuft mindestens die eingestellte Zeit, danach wird ohne Verzögerung zurückgeschaltet.
+      - **Messwerte (optional):** Leistungsaufnahme und Warmwassertemperatur mit einstellbarem Abfrageintervall. Das setzt Datenpunkte der One-Base-/E3-Gerätegeneration voraus (z. B. Vitocal 25x). Die Option wird nach der Anmeldung automatisch vorbelegt, wenn das Gerät die Datenpunkte liefert. Welche Datenpunkte ein Gerät liefert, lässt sich über die [Viessmann API](https://developer.viessmann-climatesolutions.com/) am Feature-Endpunkt der Anlage ablesen.
+
+      Die Viessmann API erlaubt im Basic-Plan 1.450 Abfragen pro 24 Stunden, gemeinsam mit der ViCare App. Warmwasser-Solltemperatur und Heizkennlinie werden hier verwaltet: Änderungen in der ViCare App werden beim nächsten Umschalten wieder überschrieben.
     en: |
-      Raises the hot water target temperature on boost and resets it afterwards. Alternative to the one-time hot water charge, which the free Viessmann API Basic plan rejects with "402 Payment Required".
+      Controls the heat pump via the Viessmann API and also works without a subscription on the free Basic plan. Instead of the one-time hot water charge, which is rejected there with "402 Payment Required", it switches between normal and boost:
 
-      Optionally, power and temperature readings can be enabled. This requires data points of the One Base/E3 device generation (e.g. Vitocal 25x, tested with a Vitocal 250-A). Which data points a device provides is device-specific and can be inspected via the [Viessmann API](https://developer.viessmann-climatesolutions.com/) feature endpoint of the installation. The "Read power and temperature values" option is pre-set automatically after login if the device provides the data points.
+      - **Hot water:** On boost the hot water target temperature is raised and reset to the normal value afterwards.
+      - **Loadpoint coupling (optional):** With the loadpoint title set, the boost temperature follows the loadpoint temperature limit (capped at the maximum boost temperature) and the normal temperature follows its minimum temperature.
+      - **Heating curve (optional):** On boost the heating curve shift of a heating circuit is raised as well. This increases the flow temperature and thereby the buffer tank charging. The slope is sent unchanged.
+      - **Minimum runtime (optional):** A boost runs at least the configured time, afterwards it switches back without delay.
+      - **Measurements (optional):** Power consumption and hot water temperature with a configurable polling interval. This requires data points of the One Base/E3 device generation (e.g. Vitocal 25x). The option is pre-set automatically after login if the device provides the data points. Which data points a device provides can be inspected via the [Viessmann API](https://developer.viessmann-climatesolutions.com/) feature endpoint of the installation.
+
+      The Viessmann API Basic plan allows 1,450 requests per 24 hours, shared with the ViCare app. Hot water target temperature and heating curve are managed here: changes made in the ViCare app are overwritten on the next switch.
 params:
   - name: clientid
     help:
