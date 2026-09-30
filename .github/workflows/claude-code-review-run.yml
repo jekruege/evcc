@@ -104,6 +104,7 @@ jobs:
         # "bwrap: Can't create file at /home/.mcp.json: Permission denied"
         uses: anthropics/claude-code-action@a874e9ecd7bb36efdad65429c6b35815f5a08f10 # v1 @ 2.1.215
         with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Provided explicitly so the review can post on fork PRs; also required
           # for allowed_non_write_users to take effect.
